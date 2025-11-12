@@ -1,0 +1,243 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {
+              name: "Ubuntu GCC",
+              os: ubuntu-latest,
+              cc: "gcc-11",
+              cxx: "g++-11"
+            }
+          - {
+              name: "Ubuntu Clang",
+              os: ubuntu-latest,
+              cc: "clang-14",
+              cxx: "clang++-14"
+            }
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          cmake \
+          ninja-build \
+          libssl-dev \
+          clang-tidy \
+          cppcheck
+
+    - name: Configure CMake
+      run: |
+        cmake -B ${{github.workspace}}/build \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} \
+          -DCMAKE_C_COMPILER=${{matrix.config.cc}} \
+          -DCMAKE_CXX_COMPILER=${{matrix.config.cxx}} \
+          -DBUILD_TESTS=ON
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+    - name: Run Tests
+      working-directory: ${{github.workspace}}/build
+      run: ctest -C ${{env.BUILD_TYPE}} --output-on-failure
+
+  sanitizers:
+    name: Sanitizers (${{ matrix.sanitizer }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [asan, ubsan]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build libssl-dev clang-14
+
+    - name: Configure with ${{ matrix.sanitizer }}
+      run: |
+        ENABLE_FLAG="-DENABLE_$(echo ${{matrix.sanitizer}} | tr '[:lower:]' '[:upper:]')=ON"
+        cmake -B ${{github.workspace}}/build \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DCMAKE_C_COMPILER=clang-14 \
+          -DCMAKE_CXX_COMPILER=clang++-14 \
+          -DBUILD_TESTS=ON \
+          $ENABLE_FLAG
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config Debug
+
+    - name: Run Tests with ${{ matrix.sanitizer }}
+      working-directory: ${{github.workspace}}/build
+      run: ctest -C Debug --output-on-failure
+
+  static-analysis:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          cmake \
+          ninja-build \
+          libssl-dev \
+          clang-14 \
+          clang-tidy-14 \
+          cppcheck
+
+    - name: Configure CMake
+      run: |
+        cmake -B ${{github.workspace}}/build \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DCMAKE_C_COMPILER=clang-14 \
+          -DCMAKE_CXX_COMPILER=clang++-14 \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          -DBUILD_TESTS=ON
+
+    - name: Run clang-tidy
+      working-directory: ${{github.workspace}}
+      run: |
+        # Run clang-tidy on source files
+        find src -name "*.cpp" | xargs clang-tidy-14 \
+          -p build \
+          --warnings-as-errors='*' \
+          --quiet \
+          || echo "clang-tidy found issues (non-blocking)"
+
+    - name: Run cppcheck
+      run: |
+        cppcheck --enable=all \
+          --inconclusive \
+          --suppress=missingIncludeSystem \
+          --suppress=unmatchedSuppression \
+          --inline-suppr \
+          --error-exitcode=0 \
+          -I include \
+          src/ \
+          2>&1 | tee cppcheck-report.txt
+
+    - name: Upload cppcheck report
+      uses: actions/upload-artifact@v3
+      with:
+        name: cppcheck-report
+        path: cppcheck-report.txt
+
+  fuzzing:
+    name: Fuzzing
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build libssl-dev clang-14
+
+    - name: Configure with Fuzzing
+      run: |
+        cmake -B ${{github.workspace}}/build \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DCMAKE_C_COMPILER=clang-14 \
+          -DCMAKE_CXX_COMPILER=clang++-14 \
+          -DBUILD_TESTS=ON \
+          -DENABLE_FUZZING=ON
+
+    - name: Build Fuzzers
+      run: cmake --build ${{github.workspace}}/build --config Debug
+
+    - name: Run Fuzzing (short)
+      working-directory: ${{github.workspace}}/build/tests
+      run: |
+        # Run each fuzzer for 60 seconds
+        echo "Running protocol fuzzer..."
+        timeout 60s ./fuzz_protocol || true
+
+        echo "Running crypto fuzzer..."
+        timeout 60s ./fuzz_crypto || true
+
+    - name: Check for crashes
+      working-directory: ${{github.workspace}}/build/tests
+      run: |
+        if ls crash-* 2>/dev/null; then
+          echo "Fuzzing found crashes!"
+          exit 1
+        fi
+        echo "No crashes found"
+
+  code-coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          cmake \
+          ninja-build \
+          libssl-dev \
+          gcc-11 \
+          g++-11 \
+          lcov
+
+    - name: Configure with Coverage
+      run: |
+        cmake -B ${{github.workspace}}/build \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DCMAKE_C_COMPILER=gcc-11 \
+          -DCMAKE_CXX_COMPILER=g++-11 \
+          -DBUILD_TESTS=ON \
+          -DCMAKE_CXX_FLAGS="--coverage" \
+          -DCMAKE_C_FLAGS="--coverage"
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config Debug
+
+    - name: Run Tests
+      working-directory: ${{github.workspace}}/build
+      run: ctest -C Debug --output-on-failure
+
+    - name: Generate Coverage Report
+      working-directory: ${{github.workspace}}
+      run: |
+        lcov --directory build --capture --output-file coverage.info
+        lcov --remove coverage.info '/usr/*' '*/tests/*' '*/build/*' --output-file coverage.info
+        lcov --list coverage.info
+
+    - name: Upload Coverage Report
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: coverage.info
