@@ -1,6 +1,6 @@
 # OpenEnclaven - Secure Enclave Prototype
 
-[![CI](https://github.com/yourusername/OpenEnclaven/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/OpenEnclaven/actions/workflows/ci.yml)
+[![CI](https://github.com/Deithand/OpenEnclaven/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/OpenEnclaven/actions/workflows/ci.yml)
 
 ⚠️ **SECURITY WARNING**: This is a research prototype and educational implementation. **No software provides absolute security guarantees.** This implementation has NOT been formally verified, professionally audited, or tested in production environments. Use at your own risk.
 
