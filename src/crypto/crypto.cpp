@@ -115,13 +115,13 @@ bool EncryptedData::Deserialize(const std::vector<uint8_t>& data, EncryptedData&
 
     // Read data
     size_t offset = 12;
-    std::copy_n(data.begin() + offset, AES_IV_SIZE, out.iv.begin());
+    std::copy_n(data.begin() + static_cast<std::vector<uint8_t>::difference_type>(offset), AES_IV_SIZE, out.iv.begin());
     offset += AES_IV_SIZE;
 
-    std::copy_n(data.begin() + offset, AES_TAG_SIZE, out.tag.begin());
+    std::copy_n(data.begin() + static_cast<std::vector<uint8_t>::difference_type>(offset), AES_TAG_SIZE, out.tag.begin());
     offset += AES_TAG_SIZE;
 
-    out.ciphertext.assign(data.begin() + offset, data.end());
+    out.ciphertext.assign(data.begin() + static_cast<std::vector<uint8_t>::difference_type>(offset), data.end());
 
     return true;
 }
@@ -196,7 +196,7 @@ std::unique_ptr<EncryptedData> CryptoModule::Encrypt(
     }
 
     // Encrypt plaintext
-    encrypted->ciphertext.resize(plaintext.size() + EVP_CIPHER_block_size(EVP_aes_256_gcm()));
+    encrypted->ciphertext.resize(plaintext.size() + static_cast<size_t>(EVP_CIPHER_block_size(EVP_aes_256_gcm())));
     int len = 0;
 
     if (EVP_EncryptUpdate(ctx, encrypted->ciphertext.data(), &len,
@@ -214,7 +214,7 @@ std::unique_ptr<EncryptedData> CryptoModule::Encrypt(
     }
 
     ciphertext_len += len;
-    encrypted->ciphertext.resize(ciphertext_len);
+    encrypted->ciphertext.resize(static_cast<size_t>(ciphertext_len));
 
     // Get authentication tag
     if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, AES_TAG_SIZE,
@@ -258,7 +258,7 @@ bool CryptoModule::Decrypt(
     }
 
     // Decrypt ciphertext
-    plaintext.resize(encrypted.ciphertext.size() + EVP_CIPHER_block_size(EVP_aes_256_gcm()));
+    plaintext.resize(encrypted.ciphertext.size() + static_cast<size_t>(EVP_CIPHER_block_size(EVP_aes_256_gcm())));
     int len = 0;
 
     if (EVP_DecryptUpdate(ctx, plaintext.data(), &len,
@@ -284,7 +284,7 @@ bool CryptoModule::Decrypt(
 
     if (ret > 0) {
         plaintext_len += len;
-        plaintext.resize(plaintext_len);
+        plaintext.resize(static_cast<size_t>(plaintext_len));
         return true;
     }
 

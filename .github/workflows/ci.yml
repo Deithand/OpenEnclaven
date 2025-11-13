@@ -144,7 +144,7 @@ jobs:
           2>&1 | tee cppcheck-report.txt
 
     - name: Upload cppcheck report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: cppcheck-report
         path: cppcheck-report.txt
@@ -237,7 +237,7 @@ jobs:
         lcov --list coverage.info
 
     - name: Upload Coverage Report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: coverage-report
         path: coverage.info
