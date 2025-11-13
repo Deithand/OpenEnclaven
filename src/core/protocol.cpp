@@ -80,7 +80,8 @@ static bool ReadString(const std::vector<uint8_t>& vec, size_t& offset, std::str
     if (len > 1024 * 1024) return false; // Sanity check: max 1MB
     if (offset + len > vec.size()) return false;
 
-    str.assign(vec.begin() + offset, vec.begin() + offset + len);
+    str.assign(vec.begin() + static_cast<std::vector<uint8_t>::difference_type>(offset),
+               vec.begin() + static_cast<std::vector<uint8_t>::difference_type>(offset + len));
     offset += len;
     return true;
 }
@@ -92,7 +93,8 @@ static bool ReadBytes(const std::vector<uint8_t>& vec, size_t& offset, std::vect
     if (len > 10 * 1024 * 1024) return false; // Sanity check: max 10MB
     if (offset + len > vec.size()) return false;
 
-    bytes.assign(vec.begin() + offset, vec.begin() + offset + len);
+    bytes.assign(vec.begin() + static_cast<std::vector<uint8_t>::difference_type>(offset),
+                 vec.begin() + static_cast<std::vector<uint8_t>::difference_type>(offset + len));
     offset += len;
     return true;
 }
